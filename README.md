@@ -1,4 +1,43 @@
-# ⚡ Forge v0.2 — Go Microservices  |  Figma → Web + Mobile
+# ⚡ Forge v0.2 — Autonomous Figma → Web + Mobile Engine
+
+Forge is a distributed, event-driven AI system that converts Figma designs into production-ready web and mobile applications using a continuous self-healing validation loop.
+
+It does not just generate UI code.  
+It builds, runs, screenshots, compares, refactors, and repeats — until the rendered output matches the original Figma design.
+
+Built with Go microservices, RabbitMQ, Supabase, Docker sandboxes, and Playwright.
+
+---
+
+## 🌱 Origin
+
+Forge was created to solve a fundamental problem in modern frontend development:
+
+Most design-to-code tools generate UI once — but they do not verify if it actually renders correctly.
+
+Real-world UI engineering requires:
+
+- Pixel accuracy  
+- Iterative refinement  
+- Runtime validation  
+- Automated testing  
+- Scalable orchestration  
+
+Forge introduces a closed-loop autonomous UI engineer:
+
+Design → Generate → Build → Screenshot → Diff → Refactor → Validate → Deliver
+
+Instead of static code generation, Forge continuously validates and improves the output until it meets a visual similarity threshold.
+
+---
+
+## 🏗 Architecture Overview
+
+Forge v0.2 runs as **7 independent Go microservices** communicating exclusively through RabbitMQ.
+
+There is **no direct service-to-service HTTP communication**.
+
+All state is persisted in Supabase.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
