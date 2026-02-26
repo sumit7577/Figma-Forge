@@ -123,7 +123,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); font
   gap: 8px;
   padding: 5px 0;
   border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s;
 }
+.svc-row:hover { background: rgba(79,111,255,0.05); }
 .svc-dot {
   width: 5px; height: 5px;
   border-radius: 50%;
@@ -131,9 +134,29 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); font
   margin-top: 5px;
   flex-shrink: 0;
   box-shadow: 0 0 5px var(--green);
+  transition: all 0.2s;
 }
+.svc-dot.idle    { background: var(--muted); box-shadow: 0 0 2px var(--muted); }
+.svc-dot.working { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); animation: blink 1s infinite; }
+.svc-dot.error   { background: var(--red); box-shadow: 0 0 8px var(--red); animation: blink 0.5s infinite; }
+
+.svc-info { flex: 1; min-width: 0; }
 .svc-name { font-family: var(--mono); font-size: 10px; color: var(--text); }
-.svc-desc { font-size: 9px; color: var(--muted); }
+.svc-desc { font-size: 9px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.svc-filter-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  transition: all 0.1s;
+}
+.svc-filter-btn:hover { background: var(--border); color: var(--accent); }
 
 .empty { font-family: var(--mono); font-size: 10px; color: var(--muted); padding: 6px 0; }
 
@@ -333,6 +356,18 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); font
 .dot.y { background: #ffbc2e; }
 .dot.g { background: #28c840; }
 .term-title { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.log-filter-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+  outline: none;
+  cursor: pointer;
+}
+.log-filter-select:focus { border-color: var(--accent); color: var(--text); }
 .btn-clear {
   margin-left: auto;
   background: none;
@@ -359,6 +394,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); font
 
 .log-line { display: flex; gap: 8px; padding: 1px 0; }
 .lt       { color: #2a2a45; flex-shrink: 0; }
+.lsvc     { color: var(--accent); flex-shrink: 0; font-weight: 600; }
 .ls       { color: #3a3a5a; flex-shrink: 0; }
 .lm       { flex: 1; word-break: break-all; }
 

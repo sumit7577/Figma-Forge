@@ -13,6 +13,15 @@ type LogLine = {
   step: string
   message: string
   data?: Record<string, unknown>
+  service?: string  // Added to identify which service
+}
+
+type ServiceStatus = {
+  name: string
+  desc: string
+  status: 'idle' | 'working' | 'error'
+  lastLog?: string
+  lastUpdate?: number
 }
 
 type ScreenStatus = {
@@ -43,6 +52,20 @@ type ForgeEvent = {
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
 const WS  = import.meta.env.VITE_WS_URL  ?? 'ws://localhost:8080/ws'
+
+// Map steps to services
+const STEP_TO_SERVICE: Record<string, string> = {
+  'parse_figma': 'figma-parser',
+  'codegen': 'codegen',
+  'sandbox': 'sandbox',
+  'screenshot': 'differ',
+  'diff': 'differ',
+  'diff_result': 'differ',
+  'job_submitted': 'gateway',
+  'screen_passed': 'orchestrator',
+  'job_done': 'orchestrator',
+  'job_failed': 'orchestrator',
+}
 
 async function createJob(body: {
   figma_url: string
@@ -77,6 +100,16 @@ export default function App() {
   const [activeJobID, setActiveJobID] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [activeStep, setActiveStep] = useState('')
+  const [logFilter, setLogFilter]   = useState<'all' | string>('all')
+  const [services, setServices]     = useState<Record<string, ServiceStatus>>({
+    'gateway':      { name: 'gateway',      desc: 'API + WS',      status: 'idle' },
+    'orchestrator': { name: 'orchestrator', desc: 'State machine', status: 'idle' },
+    'figma-parser': { name: 'figma-parser', desc: 'Figma API',     status: 'idle' },
+    'codegen':      { name: 'codegen',      desc: 'Claude API',    status: 'idle' },
+    'sandbox':      { name: 'sandbox',      desc: 'Docker runner', status: 'idle' },
+    'differ':       { name: 'differ',       desc: 'Pixel diff',    status: 'idle' },
+    'notifier':     { name: 'notifier',     desc: 'Telegram',      status: 'idle' },
+  })
 
   const logRef   = useRef<HTMLDivElement>(null)
   const lineID   = useRef(0)
@@ -124,17 +157,33 @@ export default function App() {
 
     // Log lines
     if (key.startsWith('log.')) {
+      const step = (p.step as string) ?? key
       const line: LogLine = {
         id: lineID.current++,
         ts: new Date(ev.ts).toLocaleTimeString('en', { hour12: false }),
         job_id: (p.job_id as string) ?? '',
         level: (p.level as Level) ?? 'info',
-        step: (p.step as string) ?? key,
+        step: step,
         message: (p.message as string) ?? '',
         data: p.data as Record<string, unknown>,
+        service: STEP_TO_SERVICE[step],
       }
       setLogs(prev => [...prev.slice(-500), line])
-      setActiveStep((p.step as string) ?? '')
+      setActiveStep(step)
+
+      // Update service status
+      const service = STEP_TO_SERVICE[step]
+      if (service) {
+        setServices(prev => ({
+          ...prev,
+          [service]: {
+            ...prev[service],
+            status: line.level === 'error' ? 'error' : 'working',
+            lastLog: line.message,
+            lastUpdate: Date.now(),
+          }
+        }))
+      }
     }
 
     if (key === 'job.submitted' || (key === 'log.event' && p.step === 'job_submitted')) {
@@ -310,21 +359,20 @@ export default function App() {
 
         <div className="service-map">
           <div className="section-title">Services</div>
-          {[
-            ['gateway',      'API + WS'],
-            ['orchestrator', 'State machine'],
-            ['figma-parser', 'Figma API'],
-            ['codegen',      'Claude API'],
-            ['sandbox',      'Docker runner'],
-            ['differ',       'Pixel diff'],
-            ['notifier',     'Telegram'],
-          ].map(([name, desc]) => (
-            <div key={name} className="svc-row">
-              <div className="svc-dot" />
-              <div>
-                <div className="svc-name">{name}</div>
-                <div className="svc-desc">{desc}</div>
+          {Object.values(services).map((svc) => (
+            <div key={svc.name} className={`svc-row ${svc.status}`}>
+              <div className={`svc-dot ${svc.status}`} />
+              <div className="svc-info">
+                <div className="svc-name">{svc.name}</div>
+                <div className="svc-desc" title={svc.lastLog}>{svc.lastLog || svc.desc}</div>
               </div>
+              <button
+                className="svc-filter-btn"
+                onClick={() => setLogFilter(logFilter === svc.name ? 'all' : svc.name)}
+                title={`Filter logs for ${svc.name}`}
+              >
+                {logFilter === svc.name ? '✓' : '→'}
+              </button>
             </div>
           ))}
         </div>
@@ -417,16 +465,33 @@ export default function App() {
           <section className="terminal">
             <div className="term-header">
               <span className="dot r" /><span className="dot y" /><span className="dot g" />
-              <span className="term-title">forge · live stream</span>
+              <span className="term-title">
+                {logFilter === 'all'
+                  ? 'forge · live stream'
+                  : `${logFilter} logs`}
+              </span>
+              <select
+                className="log-filter-select"
+                value={logFilter}
+                onChange={e => setLogFilter(e.target.value as 'all' | string)}
+              >
+                <option value="all">All Services</option>
+                {Object.values(services).map(svc => (
+                  <option key={svc.name} value={svc.name}>{svc.name}</option>
+                ))}
+              </select>
               <button className="btn-clear" onClick={() => setLogs([])}>clear</button>
             </div>
             <div className="log-scroll" ref={logRef}>
               {logs.length === 0 && (
                 <div className="log-empty">Waiting for events<span className="blink">_</span></div>
               )}
-              {logs.map(line => (
-                <div key={line.id} className={`log-line ${line.level}`}>
+              {logs
+                .filter(line => logFilter === 'all' || line.service === logFilter)
+                .map(line => (
+                <div key={line.id} className={`log-line ${line.level} ${line.service || ''}`}>
                   <span className="lt">{line.ts}</span>
+                  {line.service && <span className="lsvc">[{line.service}]</span>}
                   <span className="ls">[{line.step}]</span>
                   <span className="lm">{line.message}</span>
                 </div>

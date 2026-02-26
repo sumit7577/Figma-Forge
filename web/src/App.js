@@ -4,6 +4,19 @@ import './app.css';
 // ── API ───────────────────────────────────────────────────────────────────────
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
 const WS = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8080/ws';
+// Map steps to services
+const STEP_TO_SERVICE = {
+    'parse_figma': 'figma-parser',
+    'codegen': 'codegen',
+    'sandbox': 'sandbox',
+    'screenshot': 'differ',
+    'diff': 'differ',
+    'diff_result': 'differ',
+    'job_submitted': 'gateway',
+    'screen_passed': 'orchestrator',
+    'job_done': 'orchestrator',
+    'job_failed': 'orchestrator',
+};
 async function createJob(body) {
     const r = await fetch(`${API}/api/jobs`, {
         method: 'POST',
@@ -29,6 +42,16 @@ export default function App() {
     const [activeJobID, setActiveJobID] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [activeStep, setActiveStep] = useState('');
+    const [logFilter, setLogFilter] = useState('all');
+    const [services, setServices] = useState({
+        'gateway': { name: 'gateway', desc: 'API + WS', status: 'idle' },
+        'orchestrator': { name: 'orchestrator', desc: 'State machine', status: 'idle' },
+        'figma-parser': { name: 'figma-parser', desc: 'Figma API', status: 'idle' },
+        'codegen': { name: 'codegen', desc: 'Claude API', status: 'idle' },
+        'sandbox': { name: 'sandbox', desc: 'Docker runner', status: 'idle' },
+        'differ': { name: 'differ', desc: 'Pixel diff', status: 'idle' },
+        'notifier': { name: 'notifier', desc: 'Telegram', status: 'idle' },
+    });
     const logRef = useRef(null);
     const lineID = useRef(0);
     const wsRef = useRef(null);
@@ -66,17 +89,32 @@ export default function App() {
         const p = ev.payload;
         // Log lines
         if (key.startsWith('log.')) {
+            const step = p.step ?? key;
             const line = {
                 id: lineID.current++,
                 ts: new Date(ev.ts).toLocaleTimeString('en', { hour12: false }),
                 job_id: p.job_id ?? '',
                 level: p.level ?? 'info',
-                step: p.step ?? key,
+                step: step,
                 message: p.message ?? '',
                 data: p.data,
+                service: STEP_TO_SERVICE[step],
             };
             setLogs(prev => [...prev.slice(-500), line]);
-            setActiveStep(p.step ?? '');
+            setActiveStep(step);
+            // Update service status
+            const service = STEP_TO_SERVICE[step];
+            if (service) {
+                setServices(prev => ({
+                    ...prev,
+                    [service]: {
+                        ...prev[service],
+                        status: line.level === 'error' ? 'error' : 'working',
+                        lastLog: line.message,
+                        lastUpdate: Date.now(),
+                    }
+                }));
+            }
         }
         if (key === 'job.submitted' || (key === 'log.event' && p.step === 'job_submitted')) {
             const jobID = p.job_id;
@@ -205,15 +243,7 @@ export default function App() {
         { id: 'job_done', icon: '🎉', label: 'Job Done' },
     ];
     const activeStepIdx = STEPS.findIndex(s => activeStep.includes(s.id));
-    return (_jsxs("div", { className: "root", children: [_jsxs("aside", { className: "sidebar", children: [_jsxs("div", { className: "brand", children: [_jsx("div", { className: "brand-icon", children: "\u26A1" }), _jsxs("div", { children: [_jsx("div", { className: "brand-name", children: "FORGE" }), _jsx("div", { className: "brand-sub", children: "v0.2 \u00B7 microservices" })] }), _jsx("div", { className: `ws-pill ${connected ? 'on' : 'off'}`, children: connected ? 'live' : 'off' })] }), _jsxs("div", { className: "jobs-list", children: [_jsx("div", { className: "section-title", children: "Jobs" }), jobs.length === 0 && _jsx("div", { className: "empty", children: "No jobs yet" }), jobs.map(job => (_jsxs("button", { className: `job-row ${activeJobID === job.id ? 'active' : ''} ${job.status}`, onClick: () => setActiveJobID(job.id), children: [_jsx("div", { className: `job-dot ${job.status}` }), _jsxs("div", { className: "job-info", children: [_jsxs("div", { className: "job-id", children: [job.id.slice(0, 8), "\u2026"] }), _jsx("div", { className: "job-platforms", children: job.platforms.join(' + ') })] }), job.status === 'done' && (_jsxs("div", { className: "job-score", children: [job.avgScore.toFixed(0), "%"] }))] }, job.id)))] }), _jsxs("div", { className: "service-map", children: [_jsx("div", { className: "section-title", children: "Services" }), [
-                                ['gateway', 'API + WS'],
-                                ['orchestrator', 'State machine'],
-                                ['figma-parser', 'Figma API'],
-                                ['codegen', 'Claude API'],
-                                ['sandbox', 'Docker runner'],
-                                ['differ', 'Pixel diff'],
-                                ['notifier', 'Telegram'],
-                            ].map(([name, desc]) => (_jsxs("div", { className: "svc-row", children: [_jsx("div", { className: "svc-dot" }), _jsxs("div", { children: [_jsx("div", { className: "svc-name", children: name }), _jsx("div", { className: "svc-desc", children: desc })] })] }, name)))] })] }), _jsxs("main", { className: "main", children: [_jsxs("section", { className: "input-bar", children: [_jsxs("div", { className: "inputs", children: [_jsx("input", { className: "url-field", type: "url", placeholder: "\uD83C\uDFA8  Figma URL  \u2014  https://figma.com/file/\u2026", value: figmaURL, onChange: e => setFigmaURL(e.target.value), onKeyDown: e => e.key === 'Enter' && submit() }), _jsx("input", { className: "url-field secondary", type: "url", placeholder: "\uD83D\uDCE6  Git repo  (optional \u2014 style reference)", value: repoURL, onChange: e => setRepoURL(e.target.value) })] }), _jsxs("div", { className: "controls", children: [_jsx("div", { className: "platform-group", children: [
+    return (_jsxs("div", { className: "root", children: [_jsxs("aside", { className: "sidebar", children: [_jsxs("div", { className: "brand", children: [_jsx("div", { className: "brand-icon", children: "\u26A1" }), _jsxs("div", { children: [_jsx("div", { className: "brand-name", children: "FORGE" }), _jsx("div", { className: "brand-sub", children: "v0.2 \u00B7 microservices" })] }), _jsx("div", { className: `ws-pill ${connected ? 'on' : 'off'}`, children: connected ? 'live' : 'off' })] }), _jsxs("div", { className: "jobs-list", children: [_jsx("div", { className: "section-title", children: "Jobs" }), jobs.length === 0 && _jsx("div", { className: "empty", children: "No jobs yet" }), jobs.map(job => (_jsxs("button", { className: `job-row ${activeJobID === job.id ? 'active' : ''} ${job.status}`, onClick: () => setActiveJobID(job.id), children: [_jsx("div", { className: `job-dot ${job.status}` }), _jsxs("div", { className: "job-info", children: [_jsxs("div", { className: "job-id", children: [job.id.slice(0, 8), "\u2026"] }), _jsx("div", { className: "job-platforms", children: job.platforms.join(' + ') })] }), job.status === 'done' && (_jsxs("div", { className: "job-score", children: [job.avgScore.toFixed(0), "%"] }))] }, job.id)))] }), _jsxs("div", { className: "service-map", children: [_jsx("div", { className: "section-title", children: "Services" }), Object.values(services).map((svc) => (_jsxs("div", { className: `svc-row ${svc.status}`, children: [_jsx("div", { className: `svc-dot ${svc.status}` }), _jsxs("div", { className: "svc-info", children: [_jsx("div", { className: "svc-name", children: svc.name }), _jsx("div", { className: "svc-desc", title: svc.lastLog, children: svc.lastLog || svc.desc })] }), _jsx("button", { className: "svc-filter-btn", onClick: () => setLogFilter(logFilter === svc.name ? 'all' : svc.name), title: `Filter logs for ${svc.name}`, children: logFilter === svc.name ? '✓' : '→' })] }, svc.name)))] })] }), _jsxs("main", { className: "main", children: [_jsxs("section", { className: "input-bar", children: [_jsxs("div", { className: "inputs", children: [_jsx("input", { className: "url-field", type: "url", placeholder: "\uD83C\uDFA8  Figma URL  \u2014  https://figma.com/file/\u2026", value: figmaURL, onChange: e => setFigmaURL(e.target.value), onKeyDown: e => e.key === 'Enter' && submit() }), _jsx("input", { className: "url-field secondary", type: "url", placeholder: "\uD83D\uDCE6  Git repo  (optional \u2014 style reference)", value: repoURL, onChange: e => setRepoURL(e.target.value) })] }), _jsxs("div", { className: "controls", children: [_jsx("div", { className: "platform-group", children: [
                                             { id: 'react', label: '⚛ React', badge: 'web' },
                                             { id: 'nextjs', label: '▲ Next.js', badge: 'web' },
                                             { id: 'kmp', label: '🤖 KMP', badge: 'mobile' },
@@ -222,7 +252,11 @@ export default function App() {
                             const done = activeJob?.status === 'done' || activeStepIdx > i;
                             const active = activeStepIdx === i;
                             return (_jsxs("div", { className: `pipe-node ${done ? 'done' : active ? 'active' : ''}`, children: [_jsx("div", { className: "pipe-circle", children: done ? '✓' : step.icon }), _jsx("div", { className: "pipe-label", children: step.label }), i < STEPS.length - 1 && (_jsx("div", { className: `pipe-line ${done ? 'done' : ''}` }))] }, step.id));
-                        }) }), _jsxs("div", { className: "body-grid", children: [_jsxs("section", { className: "terminal", children: [_jsxs("div", { className: "term-header", children: [_jsx("span", { className: "dot r" }), _jsx("span", { className: "dot y" }), _jsx("span", { className: "dot g" }), _jsx("span", { className: "term-title", children: "forge \u00B7 live stream" }), _jsx("button", { className: "btn-clear", onClick: () => setLogs([]), children: "clear" })] }), _jsxs("div", { className: "log-scroll", ref: logRef, children: [logs.length === 0 && (_jsxs("div", { className: "log-empty", children: ["Waiting for events", _jsx("span", { className: "blink", children: "_" })] })), logs.map(line => (_jsxs("div", { className: `log-line ${line.level}`, children: [_jsx("span", { className: "lt", children: line.ts }), _jsxs("span", { className: "ls", children: ["[", line.step, "]"] }), _jsx("span", { className: "lm", children: line.message })] }, line.id))), logs.length > 0 && _jsx("span", { className: "blink", children: "\u258C" })] })] }), _jsxs("section", { className: "side", children: [_jsxs("div", { className: "progress-section", children: [_jsx("div", { className: "section-title", children: "Progress by Platform" }), ['react', 'nextjs', 'kmp', 'flutter']
+                        }) }), _jsxs("div", { className: "body-grid", children: [_jsxs("section", { className: "terminal", children: [_jsxs("div", { className: "term-header", children: [_jsx("span", { className: "dot r" }), _jsx("span", { className: "dot y" }), _jsx("span", { className: "dot g" }), _jsx("span", { className: "term-title", children: logFilter === 'all'
+                                                    ? 'forge · live stream'
+                                                    : `${logFilter} logs` }), _jsxs("select", { className: "log-filter-select", value: logFilter, onChange: e => setLogFilter(e.target.value), children: [_jsx("option", { value: "all", children: "All Services" }), Object.values(services).map(svc => (_jsx("option", { value: svc.name, children: svc.name }, svc.name)))] }), _jsx("button", { className: "btn-clear", onClick: () => setLogs([]), children: "clear" })] }), _jsxs("div", { className: "log-scroll", ref: logRef, children: [logs.length === 0 && (_jsxs("div", { className: "log-empty", children: ["Waiting for events", _jsx("span", { className: "blink", children: "_" })] })), logs
+                                                .filter(line => logFilter === 'all' || line.service === logFilter)
+                                                .map(line => (_jsxs("div", { className: `log-line ${line.level} ${line.service || ''}`, children: [_jsx("span", { className: "lt", children: line.ts }), line.service && _jsxs("span", { className: "lsvc", children: ["[", line.service, "]"] }), _jsxs("span", { className: "ls", children: ["[", line.step, "]"] }), _jsx("span", { className: "lm", children: line.message })] }, line.id))), logs.length > 0 && _jsx("span", { className: "blink", children: "\u258C" })] })] }), _jsxs("section", { className: "side", children: [_jsxs("div", { className: "progress-section", children: [_jsx("div", { className: "section-title", children: "Progress by Platform" }), ['react', 'nextjs', 'kmp', 'flutter']
                                                 .filter(p => activeJob?.platforms.includes(p))
                                                 .map(platform => {
                                                 const pScreens = activeJob?.screens.filter(s => s.platform === platform) ?? [];
