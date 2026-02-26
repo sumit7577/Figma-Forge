@@ -174,7 +174,6 @@ export default function App() {
     if (key === 'log.event' && p.step === 'diff_result') {
       const jobID    = p.job_id as string
       const score    = (p.data as Record<string, unknown>)?.score as number ?? 0
-      const platform = p.data as Record<string, unknown> // not in payload directly
       setJobs(prev => prev.map(j => {
         if (j.id !== jobID) return j
         // Update first running screen
