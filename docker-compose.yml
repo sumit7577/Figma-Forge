@@ -53,9 +53,7 @@ services:
   gateway:
     build:
       context: .
-      dockerfile: infra/docker/Dockerfile.go
-      args:
-        SERVICE: gateway
+      dockerfile: infra/docker/Dockerfile.gateway
     restart: unless-stopped
     depends_on:
       rabbitmq: { condition: service_healthy }

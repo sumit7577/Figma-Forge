@@ -1,0 +1,21 @@
+FROM golang:1.22-alpine AS builder
+RUN apk add --no-cache git ca-certificates
+
+WORKDIR /src
+# Copy go.work and all modules
+COPY go.work go.work.sum* ./
+COPY shared/ ./shared/
+# Copy all service directories (needed because go.work references all of them)
+COPY services/ ./services/
+
+RUN cd services/gateway && go mod download
+RUN cd services/gateway && \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /svc ./main.go
+
+FROM alpine:3.19
+# Copy SSL certificates from builder to avoid network issues during docker build
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder /svc /usr/local/bin/svc
+# Copy React build for serving static frontend
+COPY web/dist /app/web/dist
+ENTRYPOINT ["/usr/local/bin/svc"]
