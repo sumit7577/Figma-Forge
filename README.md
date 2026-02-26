@@ -1,8 +1,33 @@
 # ⚡ Forge v0.2 — Go Microservices  |  Figma → Web + Mobile
 
+![GitHub stars](https://img.shields.io/github/stars/sumit7577/Figma-Forge?style=flat-square)
+![GitHub forks](https://img.shields.io/github/forks/sumit7577/Figma-Forge?style=flat-square)
+![Go Version](https://img.shields.io/badge/Go-1.22-blue?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+![Docker](https://img.shields.io/badge/Docker-Compose-blue?style=flat-square)
+
+**Convert Figma designs to production-ready web and mobile code using AI. Automated end-to-end pipeline with self-healing loop.**
+
+## ✨ What is Forge?
+
+Forge is an **open-source AI-powered code generation system** that transforms Figma designs into fully functional web and mobile applications. It combines:
+
+- 🎨 **Design Parsing** - Extract components, layouts, and styling from Figma
+- 🤖 **AI Code Generation** - Claude API generates production-grade code (React, Next.js, Kotlin Multiplatform)
+- 📦 **Automated Building** - Docker-based sandboxes compile and run generated code
+- 🔍 **Pixel-Perfect Verification** - Playwright-based visual diff ensures design fidelity
+- 🔄 **Self-Healing Loop** - Automatically iterates up to 10x to reach 95% similarity match
+- 📊 **Real-time Monitoring** - Live dashboard shows each service's progress and errors
+
+Perfect for:
+- Rapid prototyping from design mockups
+- Reducing design-to-code handoff friction
+- Testing UI implementations against original designs
+- Design system automation
+
+## 🏗️ Architecture
+
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     FORGE ARCHITECTURE                               │
 │                                                                      │
 │  React UI  ◀──WS──▶  gateway  ──REST──▶  ┐                         │
 │                          │                │                          │
