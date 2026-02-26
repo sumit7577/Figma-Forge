@@ -1,0 +1,16 @@
+FROM golang:1.22 AS builder
+RUN apt-get update && apt-get install -y git ca-certificates && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY go.work go.work.sum* ./
+COPY shared/ ./shared/
+COPY services/differ/ ./services/differ/
+
+RUN cd services/differ && go mod download
+RUN cd services/differ && CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /differ ./main.go
+
+# Runtime: Playwright base image (Chromium included)
+FROM mcr.microsoft.com/playwright:v1.44.0-jammy
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /differ /usr/local/bin/differ
+ENTRYPOINT ["/usr/local/bin/differ"]

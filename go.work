@@ -1,0 +1,12 @@
+go 1.22
+
+use (
+	./shared
+	./services/gateway
+	./services/figma-parser
+	./services/codegen
+	./services/sandbox
+	./services/differ
+	./services/notifier
+	./services/orchestrator
+)
