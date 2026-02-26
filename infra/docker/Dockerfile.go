@@ -10,7 +10,8 @@ WORKDIR /src
 # Copy go.work and all modules
 COPY go.work go.work.sum* ./
 COPY shared/ ./shared/
-COPY services/${SERVICE}/ ./services/${SERVICE}/
+# Copy all service directories (needed because go.work references all of them)
+COPY services/ ./services/
 
 RUN cd services/${SERVICE} && go mod download
 RUN cd services/${SERVICE} && \

@@ -4,7 +4,8 @@ RUN apt-get update && apt-get install -y git ca-certificates && rm -rf /var/lib/
 WORKDIR /src
 COPY go.work go.work.sum* ./
 COPY shared/ ./shared/
-COPY services/differ/ ./services/differ/
+# Copy all service directories (needed because go.work references all of them)
+COPY services/ ./services/
 
 RUN cd services/differ && go mod download
 RUN cd services/differ && CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /differ ./main.go
