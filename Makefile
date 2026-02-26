@@ -53,3 +53,17 @@ dev-codegen:
 
 dev-differ:
 	cd services/differ && go run ./main.go
+
+# ── Local dev (no Docker) ─────────────────────────────────────
+setup:
+	./scripts/setup.sh
+
+dev:
+	./scripts/dev.sh
+
+# Install RabbitMQ shortcuts
+rabbit-mac:
+	brew install rabbitmq && brew services start rabbitmq
+
+rabbit-ubuntu:
+	sudo apt-get install -y rabbitmq-server && sudo systemctl enable --now rabbitmq-server
