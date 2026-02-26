@@ -125,6 +125,11 @@ type FigmaFailedPayload struct {
 	Error string `json:"error"`
 }
 
+type ParseFigmaRequestedPayload struct {
+	JobID    string `json:"job_id"`
+	FigmaURL string `json:"figma_url"`
+}
+
 type MismatchRegion struct {
 	Property string `json:"property"`
 	Actual   string `json:"actual"`
@@ -166,6 +171,13 @@ type CodegenCompletePayload struct {
 	Filename    string      `json:"filename"`
 	Threshold   int         `json:"threshold"`
 	Screen      FigmaScreen `json:"screen"`
+}
+
+type CodegenFailedPayload struct {
+	JobID       string `json:"job_id"`
+	ScreenIndex int    `json:"screen_index"`
+	Platform    string `json:"platform"`
+	Error       string `json:"error"`
 }
 
 type SandboxBuildRequestedPayload struct {

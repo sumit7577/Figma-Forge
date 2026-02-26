@@ -35,9 +35,9 @@ func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: "15:04:05"})
 	_ = godotenv.Load()
 
-	amqpURL      := envOr("AMQP_URL", "amqp://forge:forge@rabbitmq:5672/")
-	supabaseURL  := envOr("SUPABASE_URL", "")
-	supabaseKey  := envOr("SUPABASE_SERVICE_KEY", "")
+	amqpURL := envOr("AMQP_URL", "amqp://forge:forge@rabbitmq:5672/")
+	supabaseURL := envOr("SUPABASE_URL", "")
+	supabaseKey := envOr("SUPABASE_SERVICE_KEY", "")
 
 	broker, err := mq.New(amqpURL)
 	if err != nil {
@@ -93,7 +93,7 @@ func handle(ctx context.Context, d amqp.Delivery, broker *mq.Broker, differ *dif
 		Int("iter", p.Iteration).
 		Msg("running pixel diff")
 
-	result, err := differ.compare(ctx, p)
+	result, err := differ.compare(ctx, *p)
 	if err != nil {
 		b, _ := events.Wrap(events.DiffFailed, events.DiffFailedPayload{
 			JobID: p.JobID, ScreenIndex: p.ScreenIndex, Platform: p.Platform, Error: err.Error(),
@@ -231,10 +231,10 @@ func pixelCompare(refData, genData []byte) (*events.DiffResult, []byte, error) {
 	genImg = imaging.Resize(genImg, bounds.Dx(), bounds.Dy(), imaging.Lanczos)
 
 	overall, diffImg := rmse(refImg, genImg)
-	layout := regionScore(refImg, genImg, bounds, 3, 1)  // horizontal bands
-	typo   := regionScore(refImg, genImg, bounds, 1, 4)  // focus upper portion
+	layout := regionScore(refImg, genImg, bounds, 3, 1) // horizontal bands
+	typo := regionScore(refImg, genImg, bounds, 1, 4)   // focus upper portion
 	spacing := whitespaceScore(refImg, genImg)
-	clr    := colorScore(refImg, genImg)
+	clr := colorScore(refImg, genImg)
 
 	// Weighted composite
 	composite := overall*0.40 + layout*0.25 + typo*0.15 + clr*0.10 + spacing*0.10
@@ -330,10 +330,13 @@ func detectMismatches(ref, gen image.Image, bounds image.Rectangle) []events.Mis
 	var regions []events.MismatchRegion
 	qw := bounds.Dx() / 2
 	qh := bounds.Dy() / 2
-	quads := []struct{ name string; r image.Rectangle }{
-		{"top-left",     image.Rect(0, 0, qw, qh)},
-		{"top-right",    image.Rect(qw, 0, bounds.Dx(), qh)},
-		{"bottom-left",  image.Rect(0, qh, qw, bounds.Dy())},
+	quads := []struct {
+		name string
+		r    image.Rectangle
+	}{
+		{"top-left", image.Rect(0, 0, qw, qh)},
+		{"top-right", image.Rect(qw, 0, bounds.Dx(), qh)},
+		{"bottom-left", image.Rect(0, qh, qw, bounds.Dy())},
 		{"bottom-right", image.Rect(qw, qh, bounds.Dx(), bounds.Dy())},
 	}
 	type cropper interface {
@@ -349,7 +352,7 @@ func detectMismatches(ref, gen image.Image, bounds image.Rectangle) []events.Mis
 				Property: q.name + " region",
 				Actual:   fmt.Sprintf("%.0f%% match", score),
 				Expected: "≥82%",
-				X: q.r.Min.X, Y: q.r.Min.Y,
+				X:        q.r.Min.X, Y: q.r.Min.Y,
 				W: q.r.Dx(), H: q.r.Dy(),
 			})
 		}

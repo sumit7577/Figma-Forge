@@ -29,10 +29,10 @@ func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: "15:04:05"})
 	_ = godotenv.Load()
 
-	amqpURL   := envOr("AMQP_URL", "amqp://forge:forge@rabbitmq:5672/")
-	apiKey    := mustEnv("ANTHROPIC_API_KEY")
-	model     := envOr("LLM_MODEL", "claude-opus-4-5")
-	workers   := 3 // concurrent codegen workers
+	amqpURL := envOr("AMQP_URL", "amqp://forge:forge@rabbitmq:5672/")
+	apiKey := mustEnv("ANTHROPIC_API_KEY")
+	model := envOr("LLM_MODEL", "claude-opus-4-5")
+	workers := 3 // concurrent codegen workers
 
 	broker, err := mq.New(amqpURL)
 	if err != nil {
@@ -91,7 +91,7 @@ func handle(ctx context.Context, d amqp.Delivery, broker *mq.Broker, gen *genera
 		Int("iter", p.Iteration).
 		Msg("generating code")
 
-	prompt := buildPrompt(p)
+	prompt := buildPrompt(*p)
 	code, err := gen.generate(ctx, prompt)
 	if err != nil {
 		b, _ := events.Wrap(events.CodegenFailed, events.CodegenFailedPayload{

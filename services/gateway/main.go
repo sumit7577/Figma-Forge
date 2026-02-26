@@ -21,7 +21,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
-	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )

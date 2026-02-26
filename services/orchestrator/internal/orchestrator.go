@@ -346,7 +346,7 @@ func (o *Orchestrator) onDiffComplete(ctx context.Context, d amqp.Delivery) erro
 	_ = o.killSandbox(ctx, p.ContainerID)
 
 	// Save iteration to Supabase
-	_ = o.store.SaveIteration(ctx, p)
+	_ = o.store.SaveIteration(ctx, *p)
 
 	if p.Passed {
 		// ✅ Screen passed
@@ -471,7 +471,6 @@ func (o *Orchestrator) advanceOrComplete(
 	completed := js.Completed
 	total := js.TotalWork
 	screens := js.Screens
-	platforms := js.Platforms
 	js.mu.Unlock()
 	o.mu.Unlock()
 
