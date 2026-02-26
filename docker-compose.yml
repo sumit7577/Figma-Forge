@@ -1,0 +1,178 @@
+version: '3.9'
+
+# ── Forge v0.2  ──  Go Microservices Architecture ──────────────
+#
+#   Message flow (RabbitMQ topic exchange: forge.events):
+#
+#   gateway ──[job.submitted]──▶ orchestrator
+#   orchestrator ──[figma.parse.requested]──▶ figma-parser
+#   figma-parser ──[figma.parsed]──▶ orchestrator
+#   orchestrator ──[codegen.requested]──▶ codegen (× N workers)
+#   codegen ──[codegen.complete]──▶ orchestrator
+#   orchestrator ──[sandbox.build.requested]──▶ sandbox
+#   sandbox ──[sandbox.ready]──▶ orchestrator
+#   orchestrator ──[diff.requested]──▶ differ
+#   differ ──[diff.complete]──▶ orchestrator
+#   orchestrator ──[notify.requested]──▶ notifier
+#   orchestrator ──[log.event / screen.done / job.done]──▶ gateway (WS relay)
+#
+# ──────────────────────────────────────────────────────────────
+
+networks:
+  forge-net:
+    name: forge-net
+    driver: bridge
+
+volumes:
+  rabbitmq-data:
+
+services:
+
+  # ── Message Broker ────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: forge
+      RABBITMQ_DEFAULT_PASS: forge
+      RABBITMQ_DEFAULT_VHOST: /
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # Management UI: http://localhost:15672
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - forge-net
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Gateway (REST + WebSocket + React static) ─────────────────
+  gateway:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: gateway
+    restart: unless-stopped
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    environment:
+      AMQP_URL:             amqp://forge:forge@rabbitmq:5672/
+      PORT:                 8080
+      SUPABASE_URL:         ${SUPABASE_URL}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+    ports:
+      - "8080:8080"
+    networks:
+      - forge-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/status"]
+      interval: 10s
+
+  # ── Orchestrator (brain / state machine) ─────────────────────
+  orchestrator:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: orchestrator
+    restart: unless-stopped
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    environment:
+      AMQP_URL:             amqp://forge:forge@rabbitmq:5672/
+      SUPABASE_URL:         ${SUPABASE_URL}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      MAX_ITERATIONS:       ${MAX_ITERATIONS:-10}
+      SIMILARITY_TARGET:    ${SIMILARITY_TARGET:-95}
+    networks:
+      - forge-net
+
+  # ── Figma Parser ──────────────────────────────────────────────
+  figma-parser:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: figma-parser
+    restart: unless-stopped
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    environment:
+      AMQP_URL:     amqp://forge:forge@rabbitmq:5672/
+      FIGMA_TOKEN:  ${FIGMA_TOKEN}
+    networks:
+      - forge-net
+
+  # ── Code Generator (Claude API) ───────────────────────────────
+  codegen:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: codegen
+    restart: unless-stopped
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    environment:
+      AMQP_URL:          amqp://forge:forge@rabbitmq:5672/
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      LLM_MODEL:         ${LLM_MODEL:-claude-opus-4-5}
+    networks:
+      - forge-net
+    deploy:
+      replicas: 3   # Scale codegen horizontally — all consume same queue
+
+  # ── Sandbox Runner (Docker-in-Docker) ─────────────────────────
+  sandbox:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: sandbox
+    restart: unless-stopped
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    environment:
+      AMQP_URL:       amqp://forge:forge@rabbitmq:5672/
+      DOCKER_NETWORK: forge-net
+      SANDBOX_HOST:   localhost
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - forge-net
+
+  # ── Differ (Playwright + pixel compare) ──────────────────────
+  differ:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.differ
+    restart: unless-stopped
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    environment:
+      AMQP_URL:             amqp://forge:forge@rabbitmq:5672/
+      SUPABASE_URL:         ${SUPABASE_URL}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+    networks:
+      - forge-net
+
+  # ── Notifier (Telegram) ───────────────────────────────────────
+  notifier:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.go
+      args:
+        SERVICE: notifier
+    restart: unless-stopped
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    environment:
+      AMQP_URL:            amqp://forge:forge@rabbitmq:5672/
+      TELEGRAM_BOT_TOKEN:  ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID:    ${TELEGRAM_CHAT_ID:-}
+    networks:
+      - forge-net
