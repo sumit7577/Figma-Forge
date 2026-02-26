@@ -17,6 +17,7 @@ RUN cd services/${SERVICE} && \
     CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /svc ./main.go
 
 FROM alpine:3.19
-RUN apk add --no-cache ca-certificates curl
+# Copy SSL certificates from builder to avoid network issues during docker build
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /svc /usr/local/bin/svc
 ENTRYPOINT ["/usr/local/bin/svc"]

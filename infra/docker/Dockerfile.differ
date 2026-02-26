@@ -11,6 +11,7 @@ RUN cd services/differ && CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o 
 
 # Runtime: Playwright base image (Chromium included)
 FROM mcr.microsoft.com/playwright:v1.44.0-jammy
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+# Copy SSL certificates from builder instead of downloading during build
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /differ /usr/local/bin/differ
 ENTRYPOINT ["/usr/local/bin/differ"]
