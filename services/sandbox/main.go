@@ -180,6 +180,7 @@ func scaffold(dir, code, filename, platform string, port int) error {
 }
 
 func scaffoldReact(dir, code, filename string, port int) error {
+	fmt.Printf("code is %s", code)
 	// Wrap the generated component into an app
 	appCode := fmt.Sprintf(`import React from 'react'
 import ReactDOM from 'react-dom/client'
@@ -203,13 +204,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><
     "@types/react-dom": "^18.3.0"
   }
 }`, port),
-		"vite.config.ts":     `import { defineConfig } from 'vite'; import react from '@vitejs/plugin-react'; export default defineConfig({ plugins: [react()] })`,
-		"tsconfig.json":      `{"compilerOptions":{"target":"ES2020","useDefineForClassFields":true,"lib":["ES2020","DOM","DOM.Iterable"],"module":"ESNext","moduleResolution":"bundler","jsx":"react-jsx","strict":true}}`,
-		"index.html":         fmt.Sprintf(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Forge</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>`),
-		"src/main.tsx":       appCode,
-		"src/index.css":      `@tailwind base; @tailwind components; @tailwind utilities;`,
-		"tailwind.config.js": `module.exports={content:['./index.html','./src/**/*.{ts,tsx}'],theme:{extend:{}},plugins:[]}`,
-		"postcss.config.js":  `module.exports={plugins:{tailwindcss:{},autoprefixer:{}}}`,
+		"vite.config.ts":                `import { defineConfig } from 'vite'; import react from '@vitejs/plugin-react'; export default defineConfig({ plugins: [react()] })`,
+		"tsconfig.json":                 `{"compilerOptions":{"target":"ES2020","useDefineForClassFields":true,"lib":["ES2020","DOM","DOM.Iterable"],"module":"ESNext","moduleResolution":"bundler","jsx":"react-jsx","strict":true}}`,
+		"index.html":                    fmt.Sprintf(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Forge</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>`),
+		"src/main.tsx":                  appCode,
+		"src/index.css":                 `@tailwind base; @tailwind components; @tailwind utilities;`,
+		"tailwind.config.js":            `module.exports={content:['./index.html','./src/**/*.{ts,tsx}'],theme:{extend:{}},plugins:[]}`,
+		"postcss.config.js":             `module.exports={plugins:{tailwindcss:{},autoprefixer:{}}}`,
 		fmt.Sprintf("src/%s", filename): code,
 		"Dockerfile": fmt.Sprintf(`FROM node:20-alpine
 WORKDIR /app
@@ -250,7 +251,7 @@ kotlin {
         }}
     }
 }`,
-		"settings.gradle.kts":       `rootProject.name = "forge-preview"`,
+		"settings.gradle.kts":                             `rootProject.name = "forge-preview"`,
 		fmt.Sprintf("src/commonMain/kotlin/%s", filename): code,
 		"Dockerfile": fmt.Sprintf(`FROM gradle:8-jdk17
 WORKDIR /app

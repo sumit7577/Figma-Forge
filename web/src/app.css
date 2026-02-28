@@ -449,13 +449,20 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); font
 
 .screen-item {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 7px;
   padding: 7px 9px;
   border-radius: 6px;
   border: 1px solid transparent;
   font-size: 11px;
   transition: all 0.15s;
+}
+
+.si-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
 }
 .screen-item.running {
   background: rgba(79,111,255,0.06);
@@ -489,6 +496,16 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); font
 .si-badge.done    { background: rgba(0,229,153,0.12); color: var(--green); }
 .si-badge.running { background: rgba(79,111,255,0.15); color: var(--accent); }
 .si-badge.pending { background: var(--s3); color: var(--muted); }
+
+.screen-thumbnail {
+  max-width: 80px;
+  max-height: 80px;
+  border-radius: 4px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  transition: opacity 0.15s;
+}
+.screen-item:hover .screen-thumbnail { opacity: 0.8; }
 
 /* ── Scrollbar ───────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 3px; }

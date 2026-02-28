@@ -15,7 +15,7 @@ COPY services/ ./services/
 
 RUN cd services/${SERVICE} && go mod download
 RUN cd services/${SERVICE} && \
-    CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /svc ./main.go
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /svc .
 
 FROM alpine:3.19
 # Copy SSL certificates from builder to avoid network issues during docker build

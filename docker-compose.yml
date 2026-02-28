@@ -85,7 +85,7 @@ services:
     networks:
       - forge-net
 
-  # ── Code Generator (Claude API) ───────────────────────────────
+  # ── Code Generator (Claude API / OpenRouter) ─────────────────
   codegen:
     build:
       context: .
@@ -97,8 +97,10 @@ services:
       rabbitmq: { condition: service_healthy }
     environment:
       AMQP_URL:          amqp://forge:forge@rabbitmq:5672/
+      LLM_PROVIDER:      ${LLM_PROVIDER:-anthropic}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      LLM_MODEL:         ${LLM_MODEL:-claude-opus-4-5}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      LLM_MODEL:         ${LLM_MODEL}
     networks:
       - forge-net
     deploy:

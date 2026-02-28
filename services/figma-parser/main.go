@@ -128,12 +128,15 @@ func (c *figmaClient) parseFile(ctx context.Context, fileURL string) (*parsedFil
 			nodeIDs[i] = s.NodeID
 		}
 		urls, err := c.exportImages(ctx, key, nodeIDs)
-		if err == nil {
+		if err != nil {
+			log.Warn().Err(err).Msg("failed to export screen images")
+		} else {
 			for i := range screens {
 				if u, ok := urls[screens[i].NodeID]; ok {
 					screens[i].ExportURL = u
 				}
 			}
+			log.Info().Int("count", len(screens)).Msg("exported screen images")
 		}
 	}
 
@@ -202,6 +205,10 @@ func (c *figmaClient) exportImages(ctx context.Context, key string, nodeIDs []st
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("figma export API %d: %s", resp.StatusCode, b)
+	}
 	var result struct {
 		Images map[string]string `json:"images"`
 	}

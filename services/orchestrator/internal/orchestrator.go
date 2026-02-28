@@ -22,25 +22,25 @@ type screenKey struct {
 
 // screenState tracks iteration progress per screen×platform.
 type screenState struct {
-	mu         sync.Mutex
-	Iteration  int
-	BestScore  float64
-	BestCode   string
-	Done       bool
+	mu        sync.Mutex
+	Iteration int
+	BestScore float64
+	BestCode  string
+	Done      bool
 }
 
 // jobState tracks overall job progress.
 type jobState struct {
-	mu            sync.Mutex
-	Platforms     []string
-	Screens       []events.FigmaScreen
-	ScreenStates  map[screenKey]*screenState
-	TotalWork     int // screens × platforms
-	Completed     int
-	TotalScore    float64
-	TotalIter     int
-	RepoContext   string
-	Threshold     int
+	mu           sync.Mutex
+	Platforms    []string
+	Screens      []events.FigmaScreen
+	ScreenStates map[screenKey]*screenState
+	TotalWork    int // screens × platforms
+	Completed    int
+	TotalScore   float64
+	TotalIter    int
+	RepoContext  string
+	Threshold    int
 }
 
 // Orchestrator subscribes to the topic exchange and drives the full pipeline.
@@ -92,17 +92,17 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		pattern string
 		handler func(context.Context, amqp.Delivery) error
 	}{
-		{"orch.job.submitted",    events.JobSubmitted,    o.onJobSubmitted},
-		{"orch.figma.parsed",     events.FigmaParsed,     o.onFigmaParsed},
-		{"orch.figma.failed",     events.FigmaFailed,     o.onFigmaFailed},
-		{"orch.codegen.complete", events.CodegenComplete,  o.onCodegenComplete},
-		{"orch.codegen.failed",   events.CodegenFailed,    o.onCodegenFailed},
-		{"orch.sandbox.ready",    events.SandboxReady,    o.onSandboxReady},
-		{"orch.sandbox.failed",   events.SandboxFailed,   o.onSandboxFailed},
-		{"orch.diff.complete",    events.DiffComplete,    o.onDiffComplete},
-		{"orch.diff.failed",      events.DiffFailed,      o.onDiffFailed},
+		{"orch.job.submitted", events.JobSubmitted, o.onJobSubmitted},
+		{"orch.figma.parsed", events.FigmaParsed, o.onFigmaParsed},
+		{"orch.figma.failed", events.FigmaFailed, o.onFigmaFailed},
+		{"orch.codegen.complete", events.CodegenComplete, o.onCodegenComplete},
+		{"orch.codegen.failed", events.CodegenFailed, o.onCodegenFailed},
+		{"orch.sandbox.ready", events.SandboxReady, o.onSandboxReady},
+		{"orch.sandbox.failed", events.SandboxFailed, o.onSandboxFailed},
+		{"orch.diff.complete", events.DiffComplete, o.onDiffComplete},
+		{"orch.diff.failed", events.DiffFailed, o.onDiffFailed},
 		// Forward all log events to WS hub
-		{"orch.log.relay",        "log.#",                o.onLogRelay},
+		{"orch.log.relay", "log.#", o.onLogRelay},
 	}
 
 	for _, sub := range subs {

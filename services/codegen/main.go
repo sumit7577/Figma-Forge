@@ -4,12 +4,9 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -23,14 +20,12 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const anthropicURL = "https://api.anthropic.com/v1/messages"
-
 func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: "15:04:05"})
 	_ = godotenv.Load()
 
 	amqpURL := envOr("AMQP_URL", "amqp://forge:forge@rabbitmq:5672/")
-	apiKey := mustEnv("ANTHROPIC_API_KEY")
+	provider := envOr("LLM_PROVIDER", "anthropic")
 	model := envOr("LLM_MODEL", "claude-opus-4-5")
 	workers := 3 // concurrent codegen workers
 
@@ -45,14 +40,22 @@ func main() {
 		log.Fatal().Err(err).Msg("subscribe")
 	}
 
-	log.Info().Str("model", model).Int("workers", workers).Msg("codegen service started")
+	// Initialize provider based on LLM_PROVIDER env var
+	var prov Provider
+	if provider == "openrouter" {
+		apiKey := mustEnv("OPENROUTER_API_KEY")
+		prov = NewOpenRouterProvider(apiKey, model)
+		log.Info().Str("provider", "openrouter").Str("model", model).Int("workers", workers).Msg("codegen service started")
+	} else {
+		apiKey := mustEnv("ANTHROPIC_API_KEY")
+		prov = NewAnthropicProvider(apiKey, model)
+		log.Info().Str("provider", "anthropic").Str("model", model).Int("workers", workers).Msg("codegen service started")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() { <-sigs; cancel() }()
-
-	gen := &generator{apiKey: apiKey, model: model, client: &http.Client{}}
 
 	// Fan-out: multiple workers read from same queue
 	for i := 0; i < workers; i++ {
@@ -65,7 +68,7 @@ func main() {
 					if !ok {
 						return
 					}
-					if err := handle(ctx, d, broker, gen); err != nil {
+					if err := handle(ctx, d, broker, prov); err != nil {
 						log.Error().Err(err).Msg("codegen error")
 						d.Nack(false, true)
 					} else {
@@ -78,7 +81,7 @@ func main() {
 	<-ctx.Done()
 }
 
-func handle(ctx context.Context, d amqp.Delivery, broker *mq.Broker, gen *generator) error {
+func handle(ctx context.Context, d amqp.Delivery, broker *mq.Broker, prov Provider) error {
 	p, err := events.Unwrap[events.CodegenRequestedPayload](d.Body)
 	if err != nil {
 		return err
@@ -92,7 +95,7 @@ func handle(ctx context.Context, d amqp.Delivery, broker *mq.Broker, gen *genera
 		Msg("generating code")
 
 	prompt := buildPrompt(*p)
-	code, err := gen.generate(ctx, prompt)
+	code, err := prov.Generate(ctx, prompt)
 	if err != nil {
 		b, _ := events.Wrap(events.CodegenFailed, events.CodegenFailedPayload{
 			JobID: p.JobID, ScreenIndex: p.ScreenIndex, Platform: p.Platform, Error: err.Error(),
@@ -182,59 +185,6 @@ SPECIFIC ISSUES:
 
 	sb.WriteString("\nRespond with ONLY the complete component code. Nothing else.")
 	return sb.String()
-}
-
-// ── Anthropic client ──────────────────────────────────────────────────────────
-
-type generator struct {
-	apiKey string
-	model  string
-	client *http.Client
-}
-
-func (g *generator) generate(ctx context.Context, prompt string) (string, error) {
-	body, _ := json.Marshal(map[string]any{
-		"model":      g.model,
-		"max_tokens": 8192,
-		"system":     "You are an expert UI engineer. Output only raw code, never markdown fences or explanations.",
-		"messages":   []map[string]string{{"role": "user", "content": prompt}},
-	})
-
-	req, err := http.NewRequestWithContext(ctx, "POST", anthropicURL, bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", g.apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-
-	resp, err := g.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("anthropic request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	raw, _ := io.ReadAll(resp.Body)
-
-	var ar struct {
-		Content []struct {
-			Text string `json:"text"`
-		} `json:"content"`
-		Error *struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(raw, &ar); err != nil {
-		return "", fmt.Errorf("decode: %w", err)
-	}
-	if ar.Error != nil {
-		return "", fmt.Errorf("anthropic: %s", ar.Error.Message)
-	}
-	if len(ar.Content) == 0 {
-		return "", fmt.Errorf("empty response")
-	}
-
-	return stripFences(ar.Content[0].Text), nil
 }
 
 func stripFences(code string) string {

@@ -6,11 +6,11 @@ import (
 )
 
 type Config struct {
-	AMQPURL      string
-	SupabaseURL  string
-	SupabaseKey  string
-	APIPort      string
-	MaxIter      int
+	AMQPURL          string
+	SupabaseURL      string
+	SupabaseKey      string
+	APIPort          string
+	MaxIter          int
 	DefaultThreshold int
 }
 

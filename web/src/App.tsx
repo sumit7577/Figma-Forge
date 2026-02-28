@@ -30,6 +30,7 @@ type ScreenStatus = {
   status: 'pending' | 'running' | 'done'
   score: number
   iteration: number
+  imageUrl?: string  // Figma screen export URL for thumbnail
 }
 
 type JobState = {
@@ -51,7 +52,7 @@ type ForgeEvent = {
 // ── API ───────────────────────────────────────────────────────────────────────
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
-const WS  = import.meta.env.VITE_WS_URL  ?? 'ws://localhost:8080/ws'
+const WS = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8080/ws'
 
 // Map steps to services
 const STEP_TO_SERVICE: Record<string, string> = {
@@ -87,33 +88,33 @@ async function createJob(body: {
 
 export default function App() {
   // Form
-  const [figmaURL, setFigmaURL]     = useState('')
-  const [repoURL, setRepoURL]       = useState('')
-  const [platforms, setPlatforms]   = useState<string[]>(['react', 'kmp'])
-  const [styling, setStyling]       = useState('tailwind')
-  const [threshold, setThreshold]   = useState(95)
+  const [figmaURL, setFigmaURL] = useState('')
+  const [repoURL, setRepoURL] = useState('')
+  const [platforms, setPlatforms] = useState<string[]>(['react', 'kmp'])
+  const [styling, setStyling] = useState('tailwind')
+  const [threshold, setThreshold] = useState(95)
 
   // State
-  const [connected, setConnected]   = useState(false)
-  const [logs, setLogs]             = useState<LogLine[]>([])
-  const [jobs, setJobs]             = useState<JobState[]>([])
+  const [connected, setConnected] = useState(false)
+  const [logs, setLogs] = useState<LogLine[]>([])
+  const [jobs, setJobs] = useState<JobState[]>([])
   const [activeJobID, setActiveJobID] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [activeStep, setActiveStep] = useState('')
-  const [logFilter, setLogFilter]   = useState<'all' | string>('all')
-  const [services, setServices]     = useState<Record<string, ServiceStatus>>({
-    'gateway':      { name: 'gateway',      desc: 'API + WS',      status: 'idle' },
+  const [logFilter, setLogFilter] = useState<'all' | string>('all')
+  const [services, setServices] = useState<Record<string, ServiceStatus>>({
+    'gateway': { name: 'gateway', desc: 'API + WS', status: 'idle' },
     'orchestrator': { name: 'orchestrator', desc: 'State machine', status: 'idle' },
-    'figma-parser': { name: 'figma-parser', desc: 'Figma API',     status: 'idle' },
-    'codegen':      { name: 'codegen',      desc: 'Claude API',    status: 'idle' },
-    'sandbox':      { name: 'sandbox',      desc: 'Docker runner', status: 'idle' },
-    'differ':       { name: 'differ',       desc: 'Pixel diff',    status: 'idle' },
-    'notifier':     { name: 'notifier',     desc: 'Telegram',      status: 'idle' },
+    'figma-parser': { name: 'figma-parser', desc: 'Figma API', status: 'idle' },
+    'codegen': { name: 'codegen', desc: 'Claude API', status: 'idle' },
+    'sandbox': { name: 'sandbox', desc: 'Docker runner', status: 'idle' },
+    'differ': { name: 'differ', desc: 'Pixel diff', status: 'idle' },
+    'notifier': { name: 'notifier', desc: 'Telegram', status: 'idle' },
   })
 
-  const logRef   = useRef<HTMLDivElement>(null)
-  const lineID   = useRef(0)
-  const wsRef    = useRef<WebSocket | null>(null)
+  const logRef = useRef<HTMLDivElement>(null)
+  const lineID = useRef(0)
+  const wsRef = useRef<WebSocket | null>(null)
 
   // ── WebSocket ──────────────────────────────────────────────────────────────
 
@@ -128,7 +129,7 @@ export default function App() {
       try {
         const ev: ForgeEvent = JSON.parse(e.data)
         handleEvent(ev)
-      } catch {}
+      } catch { }
     }
 
     ws.onclose = () => {
@@ -153,7 +154,7 @@ export default function App() {
 
   const handleEvent = useCallback((ev: ForgeEvent) => {
     const key = ev.routing_key
-    const p   = ev.payload
+    const p = ev.payload
 
     // Log lines
     if (key.startsWith('log.')) {
@@ -211,18 +212,51 @@ export default function App() {
         ...j,
         status: 'running',
         screens: Array.from({ length: count * platforms.length }, (_, i) => ({
-          name:      `Screen ${Math.floor(i / platforms.length) + 1}`,
-          platform:  platforms[i % platforms.length],
-          status:    'pending',
-          score:     0,
+          name: `Screen ${Math.floor(i / platforms.length) + 1}`,
+          platform: platforms[i % platforms.length],
+          status: 'pending',
+          score: 0,
           iteration: 0,
+          imageUrl: undefined,  // Will be populated from figma.parsed event
         })),
       }))
     }
 
+    // Handle figma.parsed event with actual screen data including images
+    if (key === 'figma.parsed') {
+      const jobID = p.job_id as string
+      const screensData = (p.screens as Array<Record<string, unknown>>) ?? []
+      console.log('[forge] figma.parsed event:', { screensData, payload: p })
+
+      setJobs(prev => prev.map(j => {
+        if (j.id !== jobID) return j
+
+        // Create screen entries with image URLs from Figma export
+        const newScreens: ScreenStatus[] = []
+        screensData.forEach((screen) => {
+          const name = (screen.name as string) ?? 'Unnamed'
+          const imageUrl = (screen.export_url as string) ?? undefined
+          console.log('[forge] screen data:', { name, imageUrl, exportUrl: screen.export_url })
+
+          platforms.forEach(platform => {
+            newScreens.push({
+              name,
+              platform,
+              status: 'pending',
+              score: 0,
+              iteration: 0,
+              imageUrl, // Figma screen thumbnail
+            })
+          })
+        })
+
+        return { ...j, screens: newScreens }
+      }))
+    }
+
     if (key === 'log.event' && p.step === 'diff_result') {
-      const jobID    = p.job_id as string
-      const score    = (p.data as Record<string, unknown>)?.score as number ?? 0
+      const jobID = p.job_id as string
+      const score = (p.data as Record<string, unknown>)?.score as number ?? 0
       setJobs(prev => prev.map(j => {
         if (j.id !== jobID) return j
         // Update first running screen
@@ -235,11 +269,11 @@ export default function App() {
     }
 
     if (key === 'screen.done') {
-      const jobID    = p.job_id as string
-      const name     = p.screen_name as string
+      const jobID = p.job_id as string
+      const name = p.screen_name as string
       const platform = p.platform as string
-      const score    = p.score as number
-      const iter     = p.iterations as number
+      const score = p.score as number
+      const iter = p.iterations as number
       setJobs(prev => prev.map(j => {
         if (j.id !== jobID) return j
         const screens = j.screens.map(s =>
@@ -254,9 +288,9 @@ export default function App() {
     }
 
     if (key === 'job.done') {
-      const jobID   = p.job_id as string
-      const avg     = p.avg_score as number
-      const total   = p.total_iter as number
+      const jobID = p.job_id as string
+      const avg = p.avg_score as number
+      const total = p.total_iter as number
       setJobs(prev => prev.map(j => j.id !== jobID ? j : {
         ...j,
         status: 'done',
@@ -280,8 +314,8 @@ export default function App() {
     setLogs([])
     try {
       const { job_id } = await createJob({
-        figma_url:  figmaURL,
-        repo_url:   repoURL || undefined,
+        figma_url: figmaURL,
+        repo_url: repoURL || undefined,
         platforms,
         styling,
         threshold,
@@ -289,11 +323,11 @@ export default function App() {
       setActiveJobID(job_id)
     } catch (err) {
       setLogs([{
-        id:      lineID.current++,
-        ts:      new Date().toLocaleTimeString('en', { hour12: false }),
-        job_id:  '',
-        level:   'error',
-        step:    'submit',
+        id: lineID.current++,
+        ts: new Date().toLocaleTimeString('en', { hour12: false }),
+        job_id: '',
+        level: 'error',
+        step: 'submit',
         message: String(err),
       }])
     } finally {
@@ -311,13 +345,13 @@ export default function App() {
 
   // ── Pipeline steps ─────────────────────────────────────────────────────────
   const STEPS = [
-    { id: 'parse_figma',    icon: '🎨', label: 'Parse Figma' },
-    { id: 'codegen',        icon: '🤖', label: 'Generate Code' },
-    { id: 'sandbox',        icon: '📦', label: 'Build Sandbox' },
-    { id: 'screenshot',     icon: '📸', label: 'Screenshot' },
-    { id: 'diff',           icon: '🔍', label: 'Pixel Diff' },
-    { id: 'screen_passed',  icon: '✅', label: 'Screen Done' },
-    { id: 'job_done',       icon: '🎉', label: 'Job Done' },
+    { id: 'parse_figma', icon: '🎨', label: 'Parse Figma' },
+    { id: 'codegen', icon: '🤖', label: 'Generate Code' },
+    { id: 'sandbox', icon: '📦', label: 'Build Sandbox' },
+    { id: 'screenshot', icon: '📸', label: 'Screenshot' },
+    { id: 'diff', icon: '🔍', label: 'Pixel Diff' },
+    { id: 'screen_passed', icon: '✅', label: 'Screen Done' },
+    { id: 'job_done', icon: '🎉', label: 'Job Done' },
   ]
   const activeStepIdx = STEPS.findIndex(s => activeStep.includes(s.id))
 
@@ -403,9 +437,9 @@ export default function App() {
           <div className="controls">
             <div className="platform-group">
               {[
-                { id: 'react',   label: '⚛ React',  badge: 'web' },
-                { id: 'nextjs',  label: '▲ Next.js', badge: 'web' },
-                { id: 'kmp',     label: '🤖 KMP',    badge: 'mobile' },
+                { id: 'react', label: '⚛ React', badge: 'web' },
+                { id: 'nextjs', label: '▲ Next.js', badge: 'web' },
+                { id: 'kmp', label: '🤖 KMP', badge: 'mobile' },
                 { id: 'flutter', label: '💙 Flutter', badge: 'mobile' },
               ].map(p => (
                 <button
@@ -443,7 +477,7 @@ export default function App() {
         {/* Pipeline */}
         <section className="pipeline">
           {STEPS.map((step, i) => {
-            const done   = activeJob?.status === 'done' || activeStepIdx > i
+            const done = activeJob?.status === 'done' || activeStepIdx > i
             const active = activeStepIdx === i
             return (
               <div key={step.id} className={`pipe-node ${done ? 'done' : active ? 'active' : ''}`}>
@@ -489,13 +523,13 @@ export default function App() {
               {logs
                 .filter(line => logFilter === 'all' || line.service === logFilter)
                 .map(line => (
-                <div key={line.id} className={`log-line ${line.level} ${line.service || ''}`}>
-                  <span className="lt">{line.ts}</span>
-                  {line.service && <span className="lsvc">[{line.service}]</span>}
-                  <span className="ls">[{line.step}]</span>
-                  <span className="lm">{line.message}</span>
-                </div>
-              ))}
+                  <div key={line.id} className={`log-line ${line.level} ${line.service || ''}`}>
+                    <span className="lt">{line.ts}</span>
+                    {line.service && <span className="lsvc">[{line.service}]</span>}
+                    <span className="ls">[{line.step}]</span>
+                    <span className="lm">{line.message}</span>
+                  </div>
+                ))}
               {logs.length > 0 && <span className="blink">▌</span>}
             </div>
           </section>
@@ -509,9 +543,9 @@ export default function App() {
                 .filter(p => activeJob?.platforms.includes(p))
                 .map(platform => {
                   const pScreens = activeJob?.screens.filter(s => s.platform === platform) ?? []
-                  const done     = pScreens.filter(s => s.status === 'done').length
-                  const total    = pScreens.length
-                  const pct      = total > 0 ? (done / total) * 100 : 0
+                  const done = pScreens.filter(s => s.status === 'done').length
+                  const total = pScreens.length
+                  const pct = total > 0 ? (done / total) * 100 : 0
                   const avgScore = done > 0
                     ? pScreens.filter(s => s.status === 'done').reduce((a, s) => a + s.score, 0) / done
                     : 0
@@ -538,17 +572,26 @@ export default function App() {
                 )}
                 {activeJob?.screens.map((s, i) => (
                   <div key={i} className={`screen-item ${s.status}`}>
-                    <div className="si-platform">{s.platform}</div>
-                    <div className="si-name">{s.name}</div>
-                    <div className="si-iter">
-                      {s.iteration > 0 ? `iter ${s.iteration}` : ''}
-                    </div>
-                    <div className={`si-badge ${s.status}`}>
-                      {s.status === 'done'
-                        ? `✓ ${s.score.toFixed(0)}%`
-                        : s.status === 'running'
-                          ? `⚙ ${s.score > 0 ? s.score.toFixed(0)+'%' : '…'}`
-                          : '—'}
+                    {s.imageUrl && (
+                      <img
+                        src={s.imageUrl}
+                        alt={s.name}
+                        className="screen-thumbnail"
+                      />
+                    )}
+                    <div className="si-meta">
+                      <div className="si-platform">{s.platform}</div>
+                      <div className="si-name">{s.name}</div>
+                      <div className="si-iter">
+                        {s.iteration > 0 ? `iter ${s.iteration}` : ''}
+                      </div>
+                      <div className={`si-badge ${s.status}`}>
+                        {s.status === 'done'
+                          ? `✓ ${s.score.toFixed(0)}%`
+                          : s.status === 'running'
+                            ? `⚙ ${s.score > 0 ? s.score.toFixed(0) + '%' : '…'}`
+                            : '—'}
+                      </div>
                     </div>
                   </div>
                 ))}
